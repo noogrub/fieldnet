@@ -42,6 +42,22 @@ class WebSocketClient:
         payload = json.dumps(message)
         await self._ws.send(payload)
 
+    async def recv_loop(self, handler):
+        """
+        Receive messages forever and pass decoded JSON to handler(message).
+        """
+        if self._ws is None:
+            raise RuntimeError("WebSocket not connected")
+
+        async for raw in self._ws:
+            try:
+                message = json.loads(raw)
+            except Exception:
+                self._log.warning(f"received non-JSON: {raw}")
+                continue
+
+            await handler(message)
+
     async def close(self):
         if self._ws is not None:
             await self._ws.close()
