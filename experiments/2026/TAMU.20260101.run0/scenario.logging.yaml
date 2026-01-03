@@ -1,0 +1,78 @@
+logging:
+  enabled: true
+
+  # Reference the canonical schema (design-time contract)
+  schema:
+    name: "logging.node_state"
+    version: "node_state_schema_v0"
+
+  # Output control
+  output:
+    base_dir: "./logs"
+    run_label: "TAMU.20260101.run0"
+    format: "csv"                # csv | jsonl
+    overwrite: false
+
+  # What to record
+  records:
+    sample:
+      enabled: true
+      rate: "every_tick"         # every_tick | every_n
+      n: 1                        # used only if rate == every_n
+
+    mark:
+      enabled: true
+      auto:
+        - scenario_loaded
+        - faults_enabled
+        - faults_disabled
+        - beam_on
+        - beam_off
+
+  # Field selection (subset of schema fields)
+  fields:
+    # --- identity & time ---
+    - record.type
+    - record.schema_version
+    - time.sim_s
+    - time.wall_ts
+
+    # --- node ---
+    - node.id
+    - node.role
+
+    # --- state / inference ---
+    - state.truth
+    - state.pred
+    - state.class
+    - state.confidence
+    - state.anomaly
+
+    # --- fault info ---
+    - fault.level
+    - fault.bundle
+    - fault.sources
+
+    # --- experiment / provenance ---
+    - experiment.id
+    - experiment.phase
+    - experiment.scenario_hash
+    - provenance.git_tag
+
+    # --- mark fields ---
+    - mark.label
+    - mark.note
+
+  # Performance / safety knobs
+  flush:
+    every_n_records: 1            # safest default
+    on_mark: true
+
+  rotation:
+    mode: "none"                  # none | size_mb | minutes
+    value: null
+
+  # Optional notes (human-facing)
+  notes: >
+    Sample logging configuration used for schema validation and
+    dry-run testing while facility is closed.

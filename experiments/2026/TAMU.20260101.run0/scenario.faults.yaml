@@ -1,0 +1,92 @@
+faults:
+  enabled: true
+  bundle_schema: "fault_bundle_schema_v0"
+
+  # Optional: ties this fault plan to a beam header (for traceability)
+  beam_ref:
+    let_eff_MeV_cm2_mg: 12.5
+    flux_cm2_s: 2.0e5
+
+  targets:
+    - id: "motor01"
+      apply_to: "signal"   # signal | features | inference | comms (future)
+      notes: "Simulated motor condition telemetry"
+
+  segments:
+    - name: "pre"
+      t0: 0
+      t1: 300
+      marks: ["beam_off"]
+      flux: []
+      events: []
+
+    - name: "beam_on"
+      t0: 300
+      t1: 1800
+      marks: ["beam_on"]
+
+      # Flux streams: stochastic events (single-particle hits → bursts)
+      flux:
+        - name: "SET_spike_hits"
+          target: "motor01"
+          process: "poisson"
+          rate_hz: 2.0                 # events per second
+          effect:
+            kind: "impulse"
+            bundle:
+              spike.rate_add: 0.0      # (impulse uses its own rate; keep 0 here)
+              spike.mag_scale: 1.0
+              noise.sigma_add: 0.05
+            impulse:
+              # optional impulse shape knobs
+              duration_s:
+                dist: "exp"
+                mean: 0.15
+              mag_scale:
+                dist: "lognormal"
+                mu: 0.0
+                sigma: 0.7
+
+        - name: "background_noise"
+          target: "motor01"
+          process: "level"
+          level: 1.0                   # constant “on” during this segment
+          effect:
+            kind: "continuous"
+            bundle:
+              noise.sigma_add: 0.10
+
+      # Scripted events: deterministic (ramps, toggles, steps)
+      events:
+        - name: "confidence_collapse_window"
+          at: 900
+          target: "motor01"
+          action: "apply"
+          duration_s: 120
+          bundle:
+            confidence.scale: 0.85
+            misclass.prob: 0.02
+
+        - name: "TID_drift_start"
+          at: 300
+          target: "motor01"
+          action: "ramp"
+          duration_s: 1500
+          bundle_from:
+            drift.bias_add_per_s: 0.0
+          bundle_to:
+            drift.bias_add_per_s: 0.0004
+
+    - name: "post"
+      t0: 1800
+      t1: 2400
+      marks: ["beam_off"]
+      flux: []
+      events:
+        - name: "post_drift_persists"
+          at: 1800
+          target: "motor01"
+          action: "apply"
+          duration_s: 600
+          bundle:
+            drift.bias_add_per_s: 0.0004

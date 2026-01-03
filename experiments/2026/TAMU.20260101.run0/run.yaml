@@ -1,0 +1,13 @@
+run:
+  id: "TAMU.20260101.run0"
+  purpose: "Sample / schema validation run (facility closed)"
+  description: >
+    This run is a non-beam dry-run used to validate FieldNet
+    fault-injection and logging schemas prior to live irradiation.
+    Logging captures full node state, fault bundle, and provenance
+    at every tick to support downstream plotting and replay tests.
+
+  logging_notes: >
+    Logging is configured for maximum verbosity (every tick, no rotation)
+    to validate schema completeness. This policy is not representative
+    of live beam runs, which may downsample or rotate logs.
