@@ -1,0 +1,180 @@
+schema:
+  name: "faults.bundle"
+  version: "fault_bundle_schema_v0"
+  description: >
+    Canonical fault-effect bundle applied per tick. This is the internal representation
+    produced by fault plans (YAML) and recorded in logs as fault.bundle.
+    Facility/beam metadata maps into these fields via the scenario fault model.
+
+  composition_rules:
+    overview: >
+      Multiple active fault sources may contribute in a single tick. Each field defines how
+      contributions combine. Implementations must clamp values to documented ranges.
+
+    combine:
+      # Additive fields: sum contributions, then clamp
+      additive:
+        - "noise.sigma_add"
+        - "spike.rate_add"
+        - "drift.bias_add_per_s"
+        - "dropout.prob_add"
+        - "stuck.prob_add"
+
+      # Multiplicative fields: multiply contributions, then clamp
+      multiplicative:
+        - "confidence.scale"
+        - "spike.mag_scale"
+
+      # Max fields: take maximum contribution
+      max:
+        - "severity.level"
+
+    clamping:
+      severity.level: [0.0, 1.0]
+      confidence.scale: [0.0, 1.0]
+      dropout.prob_add: [0.0, 1.0]
+      stuck.prob_add: [0.0, 1.0]
+      spike.rate_add: [0.0, 1.0e9]   # rate is conceptually unbounded; keep sanity cap
+      noise.sigma_add: [0.0, 1.0e6]  # sanity cap
+      spike.mag_scale: [0.0, 1.0e6]
+
+fields:
+  # ----------------------------
+  # Human-friendly severity (optional convenience)
+  # ----------------------------
+  - key: "severity.level"
+    type: "float"
+    units: "ratio"
+    required: false
+    description: >
+      Convenience scalar (0–1) summarizing overall fault severity for quick plotting.
+      Not the primary driver; derived from other fields if desired.
+
+  # ----------------------------
+  # Signal corruption / transient effects (SET-like)
+  # ----------------------------
+  - key: "noise.sigma_add"
+    type: "float"
+    units: "signal_units"
+    required: false
+    default: 0.0
+    description: "Additive Gaussian noise standard deviation applied to the raw signal."
+
+  - key: "spike.rate_add"
+    type: "float"
+    units: "1/s"
+    required: false
+    default: 0.0
+    description: "Additive Poisson spike event rate (per second)."
+
+  - key: "spike.mag_scale"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 1.0
+    description: "Multiplier applied to spike magnitude distribution."
+
+  - key: "spike.duration_s"
+    type: "float"
+    units: "s"
+    required: false
+    description: "Optional: characteristic spike duration (if modeling multi-tick transients)."
+
+  # ----------------------------
+  # Slow degradation / drift (TID-like or aging-like)
+  # ----------------------------
+  - key: "drift.bias_add_per_s"
+    type: "float"
+    units: "signal_units/s"
+    required: false
+    default: 0.0
+    description: "Additive bias drift rate applied to the signal (per second)."
+
+  - key: "drift.gain_scale_per_s"
+    type: "float"
+    units: "1/s"
+    required: false
+    default: 0.0
+    description: "Optional: gain drift rate (per second)."
+
+  # ----------------------------
+  # Discrete state corruption (SEU-like) — future-ready, optional now
+  # ----------------------------
+  - key: "state_flip.prob"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 0.0
+    description: >
+      Probability per tick of a discrete state flip in an internal variable (SEU proxy).
+      Interpretation depends on the subsystem being targeted.
+
+  - key: "memory_bitflip.rate"
+    type: "float"
+    units: "1/s"
+    required: false
+    default: 0.0
+    description: >
+      Bitflip event rate (per second) for memory/proxy-bit models. Optional until implemented.
+
+  # ----------------------------
+  # Functional interruption / latch-up proxies (SEL-like)
+  # ----------------------------
+  - key: "dropout.prob_add"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 0.0
+    description: >
+      Additive probability per tick of a temporary dropout (e.g., missing update / forced stall).
+
+  - key: "stuck.prob_add"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 0.0
+    description: >
+      Additive probability per tick of entering a 'stuck' condition requiring reset/clear (SEL proxy).
+
+  - key: "stuck.duration_s"
+    type: "float"
+    units: "s"
+    required: false
+    description: "Optional: characteristic stuck duration if modeling self-recovery."
+
+  # ----------------------------
+  # Inference/model degradation (semantic failure knobs)
+  # ----------------------------
+  - key: "confidence.scale"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 1.0
+    description: >
+      Multiplicative scale applied to model confidence (0–1). Useful for 'silent semantic degradation'
+      even when the plant remains operational.
+
+  - key: "feature_noise.sigma_add"
+    type: "float"
+    units: "feature_units"
+    required: false
+    default: 0.0
+    description: "Additive noise injected at feature level (post-sensor)."
+
+  - key: "misclass.prob"
+    type: "float"
+    units: "ratio"
+    required: false
+    default: 0.0
+    description: "Probability per tick of forced misclassification (proxy for inference upset)."
+
+notes:
+  targeting:
+    description: >
+      Target selection (which node/channel/component receives this bundle) is defined in scenario fault
+      plans, not inside the bundle. The bundle is the per-target, per-tick result of applying those plans.
+
+  units:
+    description: >
+      'signal_units' and 'feature_units' are domain-specific. In early sims they may be unitless.
+      Hardware integrations should define actual units in the experiment header and/or instrumentation notes.

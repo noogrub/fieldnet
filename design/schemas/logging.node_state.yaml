@@ -1,0 +1,162 @@
+schema:
+  name: "logging.node_state"
+  version: "node_state_schema_v0"
+  description: >
+    Canonical logging schema for FieldNet node state telemetry.
+    Used for both simulated and live hardware experiments.
+
+record_types:
+  - sample
+  - mark
+
+fields:
+
+  # ----------------------------
+  # Record identity
+  # ----------------------------
+  - key: "record.type"
+    type: "enum"
+    required: true
+    allowed: ["sample", "mark"]
+    description: "Distinguishes periodic samples from instantaneous marks/events."
+
+  - key: "record.schema_version"
+    type: "string"
+    required: true
+    description: "Schema version identifier (e.g., node_state_schema_v0)."
+
+  # ----------------------------
+  # Timebase
+  # ----------------------------
+  - key: "time.sim_s"
+    type: "float"
+    units: "s"
+    required_if:
+      record.type: ["sample"]
+    description: "Simulation time since scenario start."
+
+  - key: "time.wall_ts"
+    type: "int"
+    units: "unix_s"
+    required: true
+    description: "Wall-clock timestamp (seconds since epoch)."
+
+  # ----------------------------
+  # Node identity
+  # ----------------------------
+  - key: "node.id"
+    type: "string"
+    required: true
+    description: "Node identifier (e.g., pi1.motor01)."
+
+  - key: "node.role"
+    type: "enum"
+    required: false
+    allowed: ["sim", "hardware", "replay"]
+    description: "Source of data: simulated, live hardware, or replay."
+
+  # ----------------------------
+  # Ground truth and inference
+  # ----------------------------
+  - key: "state.truth"
+    type: "string"
+    required_if:
+      node.role: ["sim"]
+    description: "Underlying truth state (sim-only)."
+
+  - key: "state.pred"
+    type: "string"
+    required: true
+    description: "Model-predicted state."
+
+  - key: "state.class"
+    type: "string"
+    required: true
+    description: "Operational state reported to system (e.g., OK, SUSPECT, STALL)."
+
+  - key: "state.confidence"
+    type: "float"
+    units: "ratio"
+    required: true
+    description: "Classifier confidence (0–1)."
+
+  - key: "state.anomaly"
+    type: "float"
+    units: "ratio"
+    required: true
+    description: "Anomaly score (0–1)."
+
+  # ----------------------------
+  # Raw / feature-level data (optional)
+  # ----------------------------
+  - key: "signal.vibration"
+    type: "float"
+    required: false
+    description: "Raw vibration proxy (if logged)."
+
+  - key: "feature.rms"
+    type: "float"
+    required: false
+    description: "RMS proxy feature."
+
+  - key: "feature.roughness"
+    type: "float"
+    required: false
+    description: "Roughness / mismatch proxy feature."
+
+  # ----------------------------
+  # Fault injection (summary)
+  # ----------------------------
+  - key: "fault.level"
+    type: "float"
+    units: "ratio"
+    required: false
+    description: "Convenience scalar summary of fault severity (0–1)."
+
+  - key: "fault.bundle"
+    type: "map"
+    required: false
+    description: >
+      Structured fault bundle applied this tick (bundle_v0 fields).
+
+  - key: "fault.sources"
+    type: "list"
+    required: false
+    description: "List of active fault sources contributing this tick."
+
+  # ----------------------------
+  # Experiment / provenance
+  # ----------------------------
+  - key: "experiment.id"
+    type: "string"
+    required: true
+    description: "Experiment or run identifier."
+
+  - key: "experiment.phase"
+    type: "string"
+    required: false
+    description: "Named phase (pre, beam_on, post)."
+
+  - key: "experiment.scenario_hash"
+    type: "string"
+    required: true
+    description: "Hash of scenario YAML used for this run."
+
+  - key: "provenance.git_tag"
+    type: "string"
+    required: false
+    description: "Git tag or commit hash of FieldNet code."
+
+  # ----------------------------
+  # Mark records
+  # ----------------------------
+  - key: "mark.label"
+    type: "string"
+    required_if:
+      record.type: ["mark"]
+    description: "Short mark label (beam_on, beam_off, note)."
+
+  - key: "mark.note"
+    type: "string"
+    required: false
+    description: "Optional human note attached to mark."
