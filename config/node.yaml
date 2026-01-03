@@ -1,0 +1,6 @@
+node_id: field.pi1.mod4
+site: lab
+role: field_node
+
+transport:
+  websocket_url: ws://192.168.1.50:9001

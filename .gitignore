@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs & runtime artifacts
+logs/*
+!logs/.gitkeep
+
+# Local config overrides (if any later)
+config/*.local.yaml
+
+# Editor / OS noise
+*~
+.DS_Store
