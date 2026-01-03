@@ -1,0 +1,185 @@
+schema:
+  name: "experiment.beam"
+  version: "beam_schema_v0"
+  description: >
+    Canonical beam/irradiation parameter schema used by FieldNet scenarios and logs.
+    Facility profiles map their native vocabulary onto these fields via aliases/defaults.
+
+  units_conventions:
+    # Use these canonical units internally; facility profiles may alias from other units.
+    energy: "MeV"
+    energy_per_u: "MeV/u"
+    let_eff: "MeV*cm^2/mg"
+    flux: "1/(cm^2*s)"
+    fluence: "1/cm^2"
+    temperature: "C"
+    voltage: "V"
+    angle: "deg"
+    spot: "mm"
+
+fields:
+  # ----------------------------
+  # Identity and interpretation
+  # ----------------------------
+  - key: "beam.mode"
+    type: "enum"
+    required: true
+    allowed: ["SEE", "TID", "mixed"]
+    description: "High-level test intent; guides interpretation of expected effects (events vs drift)."
+
+  - key: "beam.particle_class"
+    type: "enum"
+    required: true
+    allowed: ["proton", "heavy_ion", "neutron", "electron", "gamma", "laser", "simulated"]
+    description: "Primary irradiation particle class."
+
+  - key: "beam.ion"
+    type: "string"
+    required_if:
+      beam.particle_class: ["heavy_ion"]
+    description: "Ion species label for heavy-ion runs (e.g., Xe, Kr). Optional for protons (p)."
+
+  # ----------------------------
+  # Energy and LET characterization
+  # ----------------------------
+  - key: "beam.energy_MeV"
+    type: "float"
+    units: "MeV"
+    required_if_not_present:
+      any_of: ["beam.energy_MeV_u", "beam.let_eff_MeV_cm2_mg"]
+    description: "Beam energy in MeV (commonly for protons/electrons)."
+
+  - key: "beam.energy_MeV_u"
+    type: "float"
+    units: "MeV/u"
+    required_if_not_present:
+      any_of: ["beam.energy_MeV", "beam.let_eff_MeV_cm2_mg"]
+    description: "Beam energy per nucleon (commonly for heavy-ion cocktails)."
+
+  - key: "beam.let_eff_MeV_cm2_mg"
+    type: "float"
+    units: "MeV*cm^2/mg"
+    required_if_not_present:
+      any_of: ["beam.energy_MeV", "beam.energy_MeV_u"]
+    description: "Effective LET for the relevant reference plane (see let_reference)."
+
+  - key: "beam.let_reference"
+    type: "enum"
+    required: false
+    allowed: ["surface", "sv", "die", "unknown"]
+    default: "unknown"
+    description: >
+      Defines where LET_eff is referenced: surface, sensitive volume (sv), die, or unknown.
+
+  # ----------------------------
+  # Incidence and beam geometry
+  # ----------------------------
+  - key: "beam.incidence_deg"
+    type: "float"
+    units: "deg"
+    required: false
+    default: 0.0
+    description: "Incidence angle at DUT; 0 degrees = normal incidence."
+
+  - key: "beam.spot_mm"
+    type: "float[2]"
+    units: "mm"
+    required: false
+    description: "Beam spot size [x_mm, y_mm] at DUT (or equivalent field size)."
+
+  - key: "beam.uniformity_pct"
+    type: "float"
+    units: "percent"
+    required: false
+    description: "Beam uniformity over the specified spot/field (0–100)."
+
+  # ----------------------------
+  # Rate / delivery targets
+  # ----------------------------
+  - key: "beam.flux_cm2_s"
+    type: "float"
+    units: "1/(cm^2*s)"
+    required: false
+    description: "Instantaneous flux at DUT."
+
+  - key: "beam.fluence_cm2_target"
+    type: "float"
+    units: "1/cm^2"
+    required: false
+    description: "Target integrated fluence (end condition)."
+
+  - key: "beam.fluence_cm2_measured"
+    type: "float"
+    units: "1/cm^2"
+    required: false
+    description: "Measured integrated fluence (filled in post-run; may be null in planning)."
+
+  - key: "beam.time_s_target"
+    type: "float"
+    units: "s"
+    required: false
+    description: "Target duration (alternative end condition)."
+
+  # ----------------------------
+  # Temporal format (CW / pulsed)
+  # ----------------------------
+  - key: "beam.format"
+    type: "enum"
+    required: false
+    allowed: ["CW", "pulsed", "mixed"]
+    description: "Beam time structure."
+
+  - key: "beam.pulse.rep_rate_Hz"
+    type: "float"
+    units: "Hz"
+    required_if:
+      beam.format: ["pulsed", "mixed"]
+    description: "Pulse repetition rate (if pulsed)."
+
+  - key: "beam.pulse.width_s"
+    type: "float"
+    units: "s"
+    required_if:
+      beam.format: ["pulsed", "mixed"]
+    description: "Pulse width (if pulsed)."
+
+  - key: "beam.pulse.duty_cycle"
+    type: "float"
+    units: "ratio"
+    required: false
+    description: "Duty cycle (0–1); optional if rep_rate and width are provided."
+
+  # ----------------------------
+  # Environment / bias conditions at DUT
+  # ----------------------------
+  - key: "beam.temperature_C"
+    type: "float"
+    units: "C"
+    required: false
+    description: "DUT temperature during irradiation."
+
+  - key: "beam.vdd_V"
+    type: "float"
+    units: "V"
+    required: false
+    description: "Primary DUT supply voltage during irradiation."
+
+  - key: "beam.bias_mode"
+    type: "enum"
+    required: false
+    allowed: ["nominal", "worst_case", "custom"]
+    description: "Biasing intent (common SEE planning language)."
+
+  # ----------------------------
+  # Dosimetry / provenance
+  # ----------------------------
+  - key: "beam.dosimetry.method"
+    type: "enum"
+    required: false
+    allowed: ["faraday_cup", "ion_chamber", "film", "facility_log", "simulated"]
+    description: "Primary dosimetry method used to estimate flux/fluence."
+
+  - key: "beam.dosimetry.notes"
+    type: "string"
+    required: false
+    description: "Short human notes about dosimetry setup/provenance."
