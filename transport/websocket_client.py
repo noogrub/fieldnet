@@ -45,18 +45,33 @@ class WebSocketClient:
     async def recv_loop(self, handler):
         """
         Receive messages forever and pass decoded JSON to handler(message).
+
+        Exits quietly on normal close or task cancellation.
         """
         if self._ws is None:
             raise RuntimeError("WebSocket not connected")
 
-        async for raw in self._ws:
-            try:
-                message = json.loads(raw)
-            except Exception:
-                self._log.warning(f"received non-JSON: {raw}")
-                continue
+        try:
+            async for raw in self._ws:
+                try:
+                    message = json.loads(raw)
+                except Exception:
+                    self._log.warning(f"received non-JSON: {raw}")
+                    continue
 
-            await handler(message)
+                await handler(message)
+
+        except asyncio.CancelledError:
+            # Normal during shutdown (Ctrl-C, stop command, etc.)
+            self._log.debug("recv_loop cancelled")
+            raise
+
+        except Exception as e:
+            # Websockets may raise ConnectionClosed* variants here.
+            # Treat close as informational, not a crash.
+            self._log.info(f"recv_loop ended: {e}")
+            return
+
 
     async def close(self):
         if self._ws is not None:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
+import contextlib
 import math
 import random
 import time
@@ -191,10 +192,15 @@ async def main():
     # Shared command state
     fault_mode = "bitflip"
     fault_level = 0.0
+
+    run_mode = "run"   # "run" | "pause"
+    step_once = False  # set True to advance exactly one tick
+    tick_hz = 5.0      # default rate (dt = 1/tick_hz)
+
     lock = asyncio.Lock()
 
     async def on_message(msg: dict):
-        nonlocal fault_level, fault_mode
+        nonlocal fault_level, fault_mode, run_mode, step_once, tick_hz
         # Expect (optionally) commands from Godot or other controller
         # Example:
         # {
@@ -211,6 +217,33 @@ async def main():
         cmd = data.get("cmd")
         target = data.get("target")
         if target not in (None, motor_id, source, f"{node_id}.{motor_id}"):
+            return
+
+        if cmd == "sim.pause":
+            async with lock:
+                run_mode = "pause"
+            print("[cmd] sim.pause")
+            return
+
+        if cmd == "sim.run":
+            async with lock:
+                run_mode = "run"
+            print("[cmd] sim.run")
+            return
+
+        if cmd == "sim.step":
+            async with lock:
+                run_mode = "pause"
+                step_once = True
+            print("[cmd] sim.step")
+            return
+
+        if cmd == "sim.rate":
+            hz = float(data.get("hz", 5.0))
+            hz = max(0.2, min(hz, 200.0))
+            async with lock:
+                tick_hz = hz
+            print(f"[cmd] sim.rate hz={tick_hz}")
             return
 
         if cmd == "fault.set":
@@ -237,7 +270,7 @@ async def main():
         else:
             print("[cmd] unknown", msg)
 
-    asyncio.create_task(client.recv_loop(on_message))
+    recv_task = asyncio.create_task(client.recv_loop(on_message))
 
     sim = MotorSim(seed=42)
 
@@ -246,12 +279,25 @@ async def main():
     say_interval_ok = 18.0
     say_interval_bad = 6.0
 
-    dt = 0.2  # 5 Hz loop feels “alive” but not chatty
+    # default tick rate is 5 Hz; can be changed via sim.rate
+
     try:
         while True:
             async with lock:
                 fl = fault_level
                 fm = fault_mode
+                mode = run_mode
+                do_step = step_once
+                hz = tick_hz
+                if step_once:
+                    step_once = False
+
+            dt = 1.0 / hz
+
+            # If paused and no single-step requested, just idle lightly.
+            if mode == "pause" and not do_step:
+                await asyncio.sleep(0.1)
+                continue
 
             r = sim.step(dt, fault_level=fl)
             state = r["state"]
@@ -275,11 +321,9 @@ async def main():
                 "ts": now_ts(),
             }
 
-            # Always send node_state
             await client.send(msg_state)
             print("[sent]", msg_state)
 
-            # Also send display.color for immediate twin/UI response
             msg_color = {
                 "type": "display.color",
                 "source": source,
@@ -292,7 +336,6 @@ async def main():
             }
             await client.send(msg_color)
 
-            # Occasionally “complain” (Marvin→Dalek degradation)
             now = time.time()
             interval = say_interval_bad if fl > 0.35 or confidence < 0.6 else say_interval_ok
             if (now - last_say) > interval:
@@ -314,8 +357,16 @@ async def main():
 
             await asyncio.sleep(dt)
 
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Clean shutdown on Ctrl-C: do not print a traceback.
+        print("\n[fieldnet] stopping demo")
+
     finally:
-        await client.close()
+        recv_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await recv_task
+        with contextlib.suppress(Exception):
+            await client.close()
 
 
 if __name__ == "__main__":
