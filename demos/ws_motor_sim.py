@@ -193,14 +193,14 @@ async def main():
     fault_mode = "bitflip"
     fault_level = 0.0
 
-    run_mode = "pause"   # Start either running or paused "run" | "pause"
-    step_once = False  # set True to advance exactly one tick
-    tick_hz = 5.0      # default rate (dt = 1/tick_hz)
+    run_mode = "pause"      # "run" | "step" | "pause"
+    step_remaining = 0      # when >0, advance exactly N ticks, then remain paused
+    tick_hz = 5.0           # default rate (dt = 1/tick_hz)
 
     lock = asyncio.Lock()
 
     async def on_message(msg: dict):
-        nonlocal fault_level, fault_mode, run_mode, step_once, tick_hz
+        nonlocal fault_level, fault_mode, run_mode, step_remaining, tick_hz
         # Expect (optionally) commands from Godot or other controller
         # Example:
         # {
@@ -232,10 +232,12 @@ async def main():
             return
 
         if cmd == "sim.step":
+            n = int(data.get("n", 1))
+            n = max(1, min(n, 10_000))
             async with lock:
                 run_mode = "pause"
-                step_once = True
-            print("[cmd] sim.step")
+                step_remaining += n
+            print(f"[cmd] sim.step n={n} (queued={step_remaining})")
             return
 
         if cmd == "sim.rate":
@@ -287,17 +289,20 @@ async def main():
                 fl = fault_level
                 fm = fault_mode
                 mode = run_mode
-                do_step = step_once
+                steps = step_remaining
                 hz = tick_hz
-                if step_once:
-                    step_once = False
 
             dt = 1.0 / hz
 
             # If paused and no single-step requested, just idle lightly.
-            if mode == "pause" and not do_step:
+            if mode == "pause" and steps <= 0:
                 await asyncio.sleep(0.1)
                 continue
+
+            if mode == "pause":
+                async with lock:
+                    if step_remaining > 0:
+                        step_remaining -= 1
 
             r = sim.step(dt, fault_level=fl)
             state = r["state"]
