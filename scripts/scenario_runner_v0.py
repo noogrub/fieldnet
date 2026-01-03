@@ -64,6 +64,21 @@ def emit_mark(label: str, scenario_hash: str, note: str | None = None):
         },
     }
     print(json.dumps(rec, sort_keys=True))
+    return rec
+
+def ensure_dir(p: Path):
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def write_jsonl(path: Path, obj: dict):
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, sort_keys=True) + "\n")
+
+
+def write_json(path: Path, obj: dict):
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, sort_keys=True, indent=2)
+
 
 def initial_beam_mark(faults_cfg: dict) -> str | None:
     """
@@ -196,6 +211,18 @@ def main(run_dir: Path, t: float = 0.0):
     print(f"intent         : {run_cfg.get('intent')}")
     print(f"fault_schema   : {faults_cfg.get('schema')}")
     log_schema = logging_cfg["logging"]["schema"]
+    
+    # Output paths (use logging config if present)
+    out_cfg = logging_cfg["logging"].get("output", {})
+    base_dir = Path(out_cfg.get("base_dir", run_dir / "logs"))
+    if not base_dir.is_absolute():
+        base_dir = (run_dir / base_dir).resolve()
+    ensure_dir(base_dir)
+
+    run_label = out_cfg.get("run_label", run_cfg.get("run_label"))
+    marks_path = base_dir / f"{run_label}.marks.jsonl"
+    bundle_path = base_dir / f"{run_label}.fault_bundle.t{t}.json"
+
     print(f"logging_schema : {log_schema.get('version')}")
     print(f"scenario_hash  : {scenario_hash}")
     print(f"hash_short     : {short_hash}")
@@ -212,39 +239,45 @@ def main(run_dir: Path, t: float = 0.0):
         print(f"  - {name}: rate={rate}")
 
     # Emit scenario_loaded mark (stdout only, v0)
-    emit_mark(
+    rec = emit_mark(
         label="scenario_loaded",
         scenario_hash=scenario_hash,
         note="Scenario loaded and validated",
     )
+    write_jsonl(marks_path, rec)
 
     # Emit faults enabled/disabled mark (stdout only, v0)
     if faults_cfg.get("enabled", False):
-        emit_mark(
+        rec = emit_mark(
             label="faults_enabled",
             scenario_hash=scenario_hash,
             note="Fault injection enabled by scenario",
         )
+        write_jsonl(marks_path, rec)
+
     else:
-        emit_mark(
+        rec = emit_mark(
             label="faults_disabled",
             scenario_hash=scenario_hash,
             note="Fault injection disabled by scenario",
         )
+        write_jsonl(marks_path, rec)
 
     # Emit initial beam state mark (stdout only, v0)
     beam_mark = initial_beam_mark(faults_cfg)
     if beam_mark:
-        emit_mark(
+        rec = emit_mark(
             label=beam_mark,
             scenario_hash=scenario_hash,
             note="Initial beam state at t=0",
         )
+        write_jsonl(marks_path, rec)
 
     # Compile and emit initial fault bundle (t=0), stdout only
     initial_bundle = compile_fault_bundle_at_time(faults_cfg, t=t)
     print(f"\nInitial fault bundle @ t={t}:")
     print(json.dumps(initial_bundle, sort_keys=True))
+    write_json(bundle_path, initial_bundle)
 
     print("\nStatus: scenario loaded OK")
 
