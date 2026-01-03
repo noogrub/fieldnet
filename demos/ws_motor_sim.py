@@ -193,7 +193,7 @@ async def main():
     fault_mode = "bitflip"
     fault_level = 0.0
 
-    run_mode = "run"   # "run" | "pause"
+    run_mode = "pause"   # Start either running or paused "run" | "pause"
     step_once = False  # set True to advance exactly one tick
     tick_hz = 5.0      # default rate (dt = 1/tick_hz)
 
